@@ -67,4 +67,6 @@ int main(int argc, char *argv[]) {
 // g++ -std=c++0x -std=c++11 -msse2 -fPIC -O3 -ggdb -Wall -finline-functions -I./src -I./include -I/Users/hufei/Downloads/temp/ps-lite/deps/include  -o tests/test_simple_app tests/test_simple_app.cc build/libps.a -Wl,-rpath,/Users/hufei/Downloads/temp/ps-lite/deps/lib -L/Users/hufei/Downloads/temp/ps-lite/deps/lib -lprotobuf-lite -lzmq -pthread
 
 // g++ -std=c++0x -std=c++11 -msse2 -fPIC -O3 -ggdb -Wall -finline-functions -I./src -I./include -o test_kv_app test_kv_app.cc lib/libps.a -Wl,-rpath,lib -L./lib -lprotobuf-lite -lzmq -pthread
+
+//// g++ -std=c++0x -std=c++11 -msse2 -fPIC -O3 -ggdb -Wall -finline-functions  -I./include -o test_kv_app test_kv_app.cc lib/libps.a -Wl,-rpath,lib -L./lib -lprotobuf-lite -lzmq -pthread
 // ./local.sh 1 2 ./test_kv_app
