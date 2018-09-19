@@ -16,7 +16,7 @@ using namespace Eigen;
 
 class FM {
 public:
-    FM(int k, int num_iters=1000, double learning_rate=0.01):
+    FM(int k, int num_iters=10000, double learning_rate=0.01):
     object("regression"), 
     _num_iters(num_iters),
     _learning_rate(learning_rate), 
@@ -124,7 +124,7 @@ public:
 };
 
 int main() {    
-    FM fm{5};
+    FM fm{6};
     vector<vector<double>> X_train{{1,2}, {2,4}}; 
     vector<double> y_train{1, 2};
     // vector<vector<double>> X(2, {1,2});
@@ -140,3 +140,4 @@ int main() {
     cout<<endl;
 }
 // g++ -I /Users/hufei/Documents/StudyMaterials/C++/C++_UTILS/Eigen/eigen-eigen main.cpp
+// multi_worker start example:
