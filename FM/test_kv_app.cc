@@ -70,6 +70,6 @@ int main(int argc, char *argv[]) {
 
 //// g++ -std=c++0x -std=c++11 -msse2 -fPIC -O3 -ggdb -Wall -finline-functions  -I./include -o test_kv_app test_kv_app.cc lib/libps.a -Wl,-rpath,lib -L./lib -lprotobuf-lite -lzmq -pthread
 
-//Final compile scripts
+//Final compile
 //g++ -std=c++11 -msse2 -fPIC -O3 -ggdb -Wall -finline-functions  -I./include -o test_kv_app test_kv_app.cc -L./lib -lprotobuf-lite -lzmq -lps -pthread
 // ./local.sh 1 2 ./test_kv_app
