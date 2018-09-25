@@ -18,11 +18,11 @@ using std::time;
  * \brief an example handle adding pushed kv into store
  */
 template <typename Val>
-struct GradientDescentHandler
+struct SyncGradientDescentHandler
 {
 
   public:
-    GradientDescentHandler(double learning_rate = 0.01) : _learning_rate(learning_rate) {
+    SyncGradientDescentHandler(double learning_rate = 0.01) : _learning_rate(learning_rate) {
     }
 
     void operator()(const KVMeta &req_meta, const KVPairs<Val> &req_data, KVServer<Val> *server) {
@@ -89,7 +89,73 @@ struct GradientDescentHandler
     int hit=0;
 };
 
-void StartServer()
+template <typename Val>
+struct AsyncGradientDescentHandler
+{
+
+  public:
+    AsyncGradientDescentHandler(double learning_rate = 0.01) : _learning_rate(learning_rate) {
+    }
+
+    void operator()(const KVMeta &req_meta, const KVPairs<Val> &req_data, KVServer<Val> *server) {
+        if (!this->is_inited) {
+
+            this->init_params(req_data);
+            this->is_inited = true;
+        }
+
+        size_t n = req_data.keys.size();
+        KVPairs<Val> res;
+        if (req_meta.push) {
+            CHECK_EQ(n, req_data.vals.size());
+        }
+        else {
+            res.keys = req_data.keys;
+            res.vals.resize(n);
+        }
+
+        if (req_meta.push) {
+            // push
+            for (size_t i = 0; i < n; ++i) {
+                Key key = req_data.keys[i];
+                store[key] += this->_learning_rate * req_data.vals[i];
+            }
+        } else {
+            // pull
+            for (size_t i = 0; i < n; ++i) {
+                Key key = req_data.keys[i];
+                res.vals[i] = store[key];
+            }
+        }
+
+        server->Response(req_meta, res);
+    }
+
+  private:
+    void init_params(const KVPairs<Val> &req_data) {
+        srand((int) time(0));
+        for (size_t i = 0; i < req_data.keys.size(); i++) {
+            store[req_data.keys[i]] = (rand() % 10 + 1) / 10.0;
+            cached[req_data.keys[i]] = 0;
+        }
+        std::cout << "initialise fm model parameters" << std::endl;
+    }
+
+    std::unordered_map<Key, Val> store; // 存储Key-Value的值
+
+    int cached_count=0; // 同步了几个worker的结果
+    std::unordered_map<Key, Val> cached; // 同步一次迭代结果
+
+    double _learning_rate;
+    bool is_inited = false;
+
+    int hit=0;
+};
+
+
+
+
+void StartServer(bool is_sync)
 {
     if (!IsServer())
     {
@@ -97,8 +163,14 @@ void StartServer()
     }
     std::cout << "start server" << std::endl;
     auto server = new KVServer<float>(0);
-    auto gd_handler = GradientDescentHandler<float>(0.01);
-    server->set_request_handle(gd_handler);
+    if (is_sync) {
+        auto gd_handler = SyncGradientDescentHandler<float>(0.01);
+        server->set_request_handle(gd_handler);
+    } else {
+        auto gd_handler = AsyncGradientDescentHandler<float>(0.01);
+        server->set_request_handle(gd_handler);
+    }
+    
     RegisterExitCallback([server]() { delete server; });
 }
 
@@ -186,7 +258,7 @@ void calculate_grad(vector<Key> &keys, vector<float> &vals, vector<vector<float>
 
 }
 
-void RunWorker()
+void RunWorker(bool is_sync)
 {
     if (!IsWorker())
         return;
@@ -218,8 +290,10 @@ void RunWorker()
 
         kv.Wait(kv.Push(keys, grads));
 
-        std::cout<<"rank["<<rank<<"] is barrier at iter="<<num<<std::endl;
-        Postoffice::Get()->Barrier(0, kWorkerGroup);
+        if (is_sync) {
+            std::cout<<"rank["<<rank<<"] is barrier at iter="<<num<<std::endl;
+            Postoffice::Get()->Barrier(0, kWorkerGroup);
+        }
     }
 
     if (rank==0) {
@@ -238,12 +312,13 @@ void RunWorker()
 
 int main(int argc, char *argv[])
 {
+    bool is_sync = false;
     // start system
     Start(0);
     // setup server nodes
-    StartServer();
+    StartServer(is_sync);
     // run worker nodes
-    RunWorker();
+    RunWorker(is_sync);
     // stop system
     Finalize(0, true);
     return 0;
