@@ -41,12 +41,26 @@ struct GradientDescentHandler
             res.keys = req_data.keys;
             res.vals.resize(n);
         }
-        for (size_t i = 0; i < n; ++i) {
-            Key key = req_data.keys[i];
-            if (req_meta.push){
-                store[key] += this->_learning_rate * req_data.vals[i];
+
+        if (req_meta.push) {
+            // push
+            this->cached_count++;
+            for (size_t i = 0; i < n; ++i) {
+                Key key = req_data.keys[i];
+                cached[key] += req_data.vals[i];
+                if (this->cached_count == NumWorkers()) {
+                    store[key] += this->_learning_rate * cached[key];
+                }
             }
-            else {
+            if (this->cached_count == NumWorkers()) {
+                std::cout<<"server hit:"<< ++hit <<std::endl;
+                cached.clear();
+                this->cached_count = 0;
+            }
+        } else {
+            // pull
+            for (size_t i = 0; i < n; ++i) {
+                Key key = req_data.keys[i];
                 res.vals[i] = store[key];
             }
         }
@@ -59,14 +73,20 @@ struct GradientDescentHandler
         srand((int) time(0));
         for (size_t i = 0; i < req_data.keys.size(); i++) {
             store[req_data.keys[i]] = (rand() % 10 + 1) / 10.0;
+            cached[req_data.keys[i]] = 0;
         }
         std::cout << "initialise fm model parameters" << std::endl;
     }
 
     std::unordered_map<Key, Val> store; // 存储Key-Value的值
 
+    int cached_count=0; // 同步了几个worker的结果
+    std::unordered_map<Key, Val> cached; // 同步一次迭代结果
+
     double _learning_rate;
     bool is_inited = false;
+
+    int hit=0;
 };
 
 void StartServer()
@@ -83,31 +103,8 @@ void StartServer()
 }
 
 
-// float calcuteOne(vector<float> &x, vector<Key> &keys, vector<float> &vals, vector<float> &vF) {
-//     float result = vals[0];
-
-//     // result += this->_weights.dot(xVector);
-//     for (int i = 0; i < x.size(); i++) {
-//         result += x[i] * vals[i+1];
-//     }
-
-//     float cross_f_result = 0;
-//     for (int i = 0; i < vF.size(); i++) {
-//         vF[i] = 0;
-//         float squreVF = 0;
-//         for (int j = 0; j < x.size(); j++) {
-//             float temp = x[j] * vals[1 + x.size() + i*x.size()+j];
-//             vF[i] += temp;
-//             squreVF +=  temp * temp;
-//         }
-//         cross_f_result += vF[i] * vF[i] - squreVF;
-//     }
-//     result += 0.5 * cross_f_result;
-//     return result;
-// }
-
-vector<vector<float>> X_train{{1, 2}, {2, 4}, {2,1}};
-vector<int> y_train{1, 2,1};
+vector<vector<float>> X_train{{0, 0}, {2, 2}, {2,1}, {1,2}};
+vector<int> y_train{1, 1, 2,2};
 
 std::pair<vector<vector<float>>, vector<int>> get_training_data(int rank) {
     int num_workers = NumWorkers();
@@ -214,11 +211,6 @@ void RunWorker()
     vector<float> grads(keys.size());
     for(int num = 0; num < num_iter; num++) {
         kv.Wait(kv.Pull(keys, &vals));
-        // if (num == 0) {
-        //             print_vector<Key>(keys);
-        // print_vector<float>(vals);
-        // }
-
         for (size_t t = 0; t < grads.size(); t++) {
             grads[t] = 0;
         }
@@ -226,10 +218,8 @@ void RunWorker()
 
         kv.Wait(kv.Push(keys, grads));
 
-        // if (num == 1) {
-        //     break;
-        // }
-
+        std::cout<<"rank["<<rank<<"] is barrier at iter="<<num<<std::endl;
+        Postoffice::Get()->Barrier(0, kWorkerGroup);
     }
 
     if (rank==0) {
